@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fs::hard_link;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -9,8 +11,8 @@ use axum::http::{HeaderMap, HeaderValue, Method};
 use axum::http::header::{ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_LENGTH, CONTENT_TYPE, STRICT_TRANSPORT_SECURITY};
 use axum::response::Response;
 use bstr::ByteSlice;
-use futures_util::StreamExt;
 use futures_util::stream::unfold;
+use futures_util::StreamExt;
 use reqwest::Client;
 use tokio::fs::{create_dir_all, File, write};
 use tokio::io::AsyncWriteExt;
@@ -50,7 +52,6 @@ async fn get_proxy(header: HeaderMap,
                    Extension(cfg): Extension<Arc<ForwardConfig>>,
                    RawBody(payload): RawBody) -> StreamResponse {
 	let npath = normalize_url_path(&cfg.output, &q, &path, cfg.prefix_local.is_none());
-
 	if let Some(parent) = npath.parent() {
 		if let Err(e) = create_dir_all(parent).await {
 			warn!("{e} at {parent:?}");
@@ -71,6 +72,20 @@ async fn get_proxy(header: HeaderMap,
 			.await
 			.unwrap();
 		#[allow(clippy::never_loop)]
+		let (out, npath, link) = loop {
+			if npath.extension().and_then(|it| if it == "unknown_ext" { Some(()) } else { None }).is_some() {
+				if let Some(ct) = resp.headers().get(CONTENT_TYPE) {
+					if let Some(ext) = mime_guess::get_mime_extensions_str(&String::from_utf8_lossy(ct.as_bytes())) {
+						let mut f = npath.file_stem().unwrap().to_os_string();
+						f.push(".");
+						f.push(ext[0]);
+						break (Cow::<std::path::Path>::Owned(npath.parent().unwrap().join(f)), Cow::<std::path::Path>::Borrowed(&npath), true);
+					}
+				}
+			}
+			break (Cow::<std::path::Path>::Borrowed(&npath), Cow::<std::path::Path>::Borrowed(&npath), false);
+		};
+		#[allow(clippy::never_loop)]
 		loop {
 			let mut builder = Response::builder()
 				.header(ACCESS_CONTROL_ALLOW_ORIGIN, format!("localhost:{}", cfg.http.listen))
@@ -81,6 +96,7 @@ async fn get_proxy(header: HeaderMap,
 				if k.as_str() == "expect-ct" { continue; }
 				builder = builder.header(k, v);
 			}
+
 
 			if let Some(ct) = resp.headers().get(CONTENT_TYPE) {
 				let ct = ct.as_bytes();
@@ -131,6 +147,11 @@ async fn get_proxy(header: HeaderMap,
 							if let Err(e) = write(&npath, &target).await {
 								warn!("{e} at {npath:?}");
 							};
+							if link {
+								if let Err(e) = hard_link(&out, &npath) {
+									warn!("{e} at {npath:?}");
+								}
+							}
 						}
 
 						break builder.stream_single(target);
@@ -140,7 +161,13 @@ async fn get_proxy(header: HeaderMap,
 				}
 			}
 
-			let file = File::create(npath).await.unwrap();
+			let file = File::create(&out).await.unwrap();
+
+			if link {
+				if let Err(e) = hard_link(&out, &npath) {
+					warn!("{e} at {npath:?}");
+				}
+			}
 			let inner = Box::pin(resp.bytes_stream());
 			let stream = unfold((file, inner), |(mut file, mut inner)| async move {
 				match inner.next().await? {

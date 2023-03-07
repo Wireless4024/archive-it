@@ -38,14 +38,14 @@ impl StreamBodyExt for Builder {
 
 pub(crate) fn normalize_url_path(output: &Path, q: &HashMap<String, String>, path: &str, with_state: bool) -> PathBuf {
 	if path.is_empty() {
-		output.join("index.html")
+		output.join("index.unknown_ext")
 	} else {
 		let mut path = output.join(path);
 
 		if path.as_os_str().to_string_lossy().ends_with('/') || path.extension().is_none() {
 			if let Some(name) = path.file_name() {
 				let mut last = name.to_os_string();
-				last.push(".html");
+				last.push(".unknown_ext");
 				path.pop();
 				path.push(last);
 			}
@@ -61,8 +61,10 @@ pub(crate) fn normalize_url_path(output: &Path, q: &HashMap<String, String>, pat
 			for (k, v) in q.iter() {
 				last.push("-");
 				last.push(percent_encode(k.as_bytes(), NON_ALPHANUMERIC).to_string());
-				last.push("=");
-				last.push(percent_encode(v.as_bytes(), NON_ALPHANUMERIC).to_string());
+				if !v.is_empty() {
+					last.push("=");
+					last.push(percent_encode(v.as_bytes(), NON_ALPHANUMERIC).to_string());
+				}
 			}
 			if let Some(ext) = ext {
 				last.push(".");
@@ -76,8 +78,8 @@ pub(crate) fn normalize_url_path(output: &Path, q: &HashMap<String, String>, pat
 }
 
 pub(crate) async fn serve_file(npath: PathBuf, mut builder: Builder) -> StreamResponse {
-	let typ = mime_guess::from_path(&npath);
 	let actual = read_link(&npath).await.unwrap_or(npath);
+	let typ = mime_guess::from_path(&actual);
 	let Ok(mut file) = File::open(&actual).await else {
 		return builder.status(StatusCode::NOT_FOUND).stream_single(vec![]);
 	};
