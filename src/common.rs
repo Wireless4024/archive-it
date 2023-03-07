@@ -13,7 +13,6 @@ use futures_util::stream::unfold;
 use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
 use tokio::fs::{File, read_link};
 use tokio::io::AsyncReadExt;
-use tracing::info;
 
 use crate::stream_single;
 
@@ -85,7 +84,7 @@ pub(crate) async fn serve_file(npath: PathBuf, mut builder: Builder) -> StreamRe
 	let meta = file.metadata().await.unwrap();
 	builder = builder.header(CONTENT_TYPE, typ.first().unwrap_or(mime_guess::mime::TEXT_HTML).to_string());
 
-	if meta.len() > 65536 {
+	if meta.len() > (1 << 18) {
 		builder.stream(unfold((file, BytesMut::with_capacity(4096)), |(mut file, mut buf)| async move {
 			buf.reserve(4096);
 			match file.read_buf(&mut buf).await {
