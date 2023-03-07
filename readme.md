@@ -13,7 +13,7 @@ To archive content from docs.rs you'll need something like this
 # -l : listen port
 # <upstream host>
 # <output folder>
-archive-it -s -l 8000 docs.rs docs-archive
+archive-it forward -s -l 8000 docs.rs docs-archive
 ```
 and then navigate to localhost:8000 (url will show up in console)  
 it will archive all resource that you navigate through it.
