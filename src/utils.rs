@@ -1,4 +1,5 @@
 use std::path::{Component, PathBuf};
+
 use aho_corasick::AhoCorasick;
 use bstr::ByteSlice;
 

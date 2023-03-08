@@ -18,7 +18,7 @@ use tokio::fs::{create_dir_all, File, write};
 use tokio::io::AsyncWriteExt;
 use tracing::{info, warn};
 
-use crate::{Config, http_all};
+use crate::{Config, http_all, unwrap_void};
 use crate::cli::HttpConfig;
 use crate::common::{normalize_url_path, serve_file, StreamBodyExt, StreamResponse};
 
@@ -72,7 +72,7 @@ async fn get_proxy(header: HeaderMap,
 			.await
 			.unwrap();
 		#[allow(clippy::never_loop)]
-		let (out, npath, link) = loop {
+			let (out, npath, link) = loop {
 			if npath.extension().and_then(|it| if it == "unknown_ext" { Some(()) } else { None }).is_some() {
 				if let Some(ct) = resp.headers().get(CONTENT_TYPE) {
 					if let Some(ext) = mime_guess::get_mime_extensions_str(&String::from_utf8_lossy(ct.as_bytes())) {
@@ -140,17 +140,11 @@ async fn get_proxy(header: HeaderMap,
 						}
 						if method == Method::GET {
 							if let Some(parent) = npath.parent() {
-								if let Err(e) = create_dir_all(format!("{}/", parent.to_string_lossy())).await {
-									warn!("{e} at {parent:?}");
-								};
+								unwrap_void!(create_dir_all(format!("{}/", parent.to_string_lossy())).await);
 							}
-							if let Err(e) = write(&npath, &target).await {
-								warn!("{e} at {npath:?}");
-							};
+							unwrap_void!(write(&npath, &target).await);
 							if link {
-								if let Err(e) = hard_link(&out, &npath) {
-									warn!("{e} at {npath:?}");
-								}
+								unwrap_void!(hard_link(&out, &npath));
 							}
 						}
 
@@ -164,17 +158,13 @@ async fn get_proxy(header: HeaderMap,
 			let file = File::create(&out).await.unwrap();
 
 			if link {
-				if let Err(e) = hard_link(&out, &npath) {
-					warn!("{e} at {npath:?}");
-				}
+				unwrap_void!(hard_link(&out, &npath));
 			}
 			let inner = Box::pin(resp.bytes_stream());
 			let stream = unfold((file, inner), |(mut file, mut inner)| async move {
 				match inner.next().await? {
 					Ok(buf) => {
-						if let Err(e) = file.write_all(&buf).await {
-							warn!("Error during write file: {e}");
-						}
+						unwrap_void!(file.write_all(&buf).await);
 						Some((Ok(buf), (file, inner)))
 					}
 					Err(err) => {

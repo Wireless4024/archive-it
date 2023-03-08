@@ -55,3 +55,24 @@ macro_rules! http_all {
 	    $crate::http!($port, app);
     };
 }
+
+/// Unwrap a result that program can still run and log if possible
+#[macro_export]
+macro_rules! unwrap_void {
+    ($expr:expr) => {
+	    if let Err(e) = $expr {
+			#[cfg(debug_assertions)]
+			{
+				let backtrace = std::backtrace::Backtrace::force_capture();
+				tracing::warn!("{e} {backtrace}");
+			}
+			#[cfg(not(debug_assertions))]
+			{
+				tracing::warn!("{e}");
+				// still logging stack trace but at not verbose
+				let backtrace = std::backtrace::Backtrace::capture();
+				tracing::trace!("{backtrace}");
+			}
+		}
+    };
+}
