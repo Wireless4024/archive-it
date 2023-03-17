@@ -1,4 +1,4 @@
-use std::path::{Component, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use aho_corasick::AhoCorasick;
 use bstr::ByteSlice;
@@ -46,7 +46,7 @@ fn extend_absolute(buf: &[u8], rpath: &[u8], out: &mut Vec<u8>) {
 		let path = &buf[start..end];
 		let mut res_pfx = vec![Component::CurDir];
 
-		PathBuf::from(path.as_bstr().to_string()).strip_prefix(&current);
+		//PathBuf::from(path.as_bstr().to_string()).strip_prefix(&current);
 		out.extend(PathBuf::from_iter(res_pfx).to_string_lossy().as_bytes());
 		off = end;
 	}
@@ -58,4 +58,18 @@ fn extend_absolute(buf: &[u8], rpath: &[u8], out: &mut Vec<u8>) {
 		out.extend(x);
 	}*/
 	// "href=\"/"
+}
+
+pub fn read_dir_recursive(path: &Path) -> Vec<PathBuf> {
+	let mut res = vec![];
+	for e in path.read_dir().unwrap().flatten() {
+		if let Ok(meta) = e.metadata() {
+			if meta.is_dir() {
+				res.extend(read_dir_recursive(&e.path()));
+			} else {
+				res.push(e.path())
+			}
+		}
+	}
+	res
 }

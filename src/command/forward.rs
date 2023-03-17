@@ -51,13 +51,13 @@ async fn get_proxy(header: HeaderMap,
                    Query(q): Query<HashMap<String, String>>,
                    Extension(cfg): Extension<Arc<ForwardConfig>>,
                    RawBody(payload): RawBody) -> StreamResponse {
-	let npath = normalize_url_path(&cfg.output, &q, &path, cfg.prefix_local.is_none());
+	let method = Method::from_bytes(header.get("method").unwrap_or(&HeaderValue::from_static("GET")).as_bytes()).unwrap_or_default();
+	let npath = normalize_url_path(&cfg.output, &method, &q, &path, cfg.prefix_local.is_none());
 	if let Some(parent) = npath.parent() {
 		if let Err(e) = create_dir_all(parent).await {
 			warn!("{e} at {parent:?}");
 		}
 	}
-	let method = Method::from_bytes(header.get("method").unwrap_or(&HeaderValue::from_static("GET")).as_bytes()).unwrap_or_default();
 	let builder = Response::builder();
 	if method == Method::GET && npath.exists() {
 		info!("Serving:    {path:?}");

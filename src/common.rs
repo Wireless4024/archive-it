@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use axum::body::{Bytes, StreamBody};
+use axum::http::{Method, StatusCode};
 use axum::http::header::CONTENT_TYPE;
 use axum::http::response::Builder;
-use axum::http::StatusCode;
 use axum::response::Response;
 use bytes::BytesMut;
 use futures_util::Stream;
@@ -36,16 +36,18 @@ impl StreamBodyExt for Builder {
 	}
 }
 
-pub(crate) fn normalize_url_path(output: &Path, q: &HashMap<String, String>, path: &str, with_state: bool) -> PathBuf {
+static UNKNOWN_EXT: &str = "unknown_ext";
+
+pub(crate) fn normalize_url_path(output: &Path, method: &Method, q: &HashMap<String, String>, path: &str, with_state: bool) -> PathBuf {
 	if path.is_empty() {
-		output.join("index.unknown_ext")
+		output.join(format!("index.{method}.{UNKNOWN_EXT}"))
 	} else {
 		let mut path = output.join(path);
 
 		if path.as_os_str().to_string_lossy().ends_with('/') || path.extension().is_none() {
 			if let Some(name) = path.file_name() {
 				let mut last = name.to_os_string();
-				last.push(".unknown_ext");
+				last.push(UNKNOWN_EXT);
 				path.pop();
 				path.push(last);
 			}
