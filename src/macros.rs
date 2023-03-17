@@ -2,9 +2,9 @@
 macro_rules! stream_single {
     ($vec:expr) => {
 	    {
-		    let stream: Pin<Box<dyn Stream<Item=Result<Bytes, axum::Error>> + Send + Sync>> = Box::pin(
+		    let stream: std::pin::Pin<Box<dyn futures_util::stream::Stream<Item=Result<axum::body::Bytes, axum::Error>> + Send + Sync>> = Box::pin(
 				futures_util::stream::unfold(
-					Some(Bytes::from($vec)),
+					Some(axum::body::Bytes::from($vec)),
 					|it| async {
 						Some((Ok(it?), None))
 					},
@@ -19,7 +19,7 @@ macro_rules! stream_single {
 macro_rules! box_stream {
     ($stream:expr) => {
 	    {
-		    let stream: Pin<Box<dyn Stream<Item=Result<Bytes, axum::Error>> + Send + Sync>> = Box::pin(
+		    let stream: Pin<Box<dyn futures_util::stream::Stream<Item=Result<axum::body::Bytes, axum::Error>> + Send + Sync>> = Box::pin(
 				$stream	
 			);
 		    stream
@@ -47,11 +47,11 @@ macro_rules! http_all {
 	($port:expr, $intercept:expr, $root_intercept:expr) => {
 		$crate::http_all!($port,$intercept,$intercept,());
 	};
-    ($port:expr, $intercept:expr, $root_intercept:expr, $data:expr) => {
+    ($port:expr, $intercept:expr, $root_intercept:expr, $($data:expr),+) => {
 	    let app = axum::Router::new()
 			.route("/*path", axum::routing::get($intercept).fallback($intercept))
 			.route("/", axum::routing::get($root_intercept).fallback($root_intercept))
-			.layer(axum::Extension(std::sync::Arc::new($data)));
+			$(.layer(axum::Extension($data)))+;
 	    $crate::http!($port, app);
     };
 }

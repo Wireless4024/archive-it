@@ -60,14 +60,15 @@ fn extend_absolute(buf: &[u8], rpath: &[u8], out: &mut Vec<u8>) {
 	// "href=\"/"
 }
 
-pub fn read_dir_recursive(path: &Path) -> Vec<PathBuf> {
+pub fn read_dir_recursive(path: &Path) -> Vec<(PathBuf, bool)> {
 	let mut res = vec![];
 	for e in path.read_dir().unwrap().flatten() {
 		if let Ok(meta) = e.metadata() {
 			if meta.is_dir() {
+				res.push((e.path(), true));
 				res.extend(read_dir_recursive(&e.path()));
 			} else {
-				res.push(e.path())
+				res.push((e.path(), false));
 			}
 		}
 	}

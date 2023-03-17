@@ -1,9 +1,8 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use axum::body::{Bytes, StreamBody};
-use axum::http::{Method, StatusCode};
+use axum::http::StatusCode;
 use axum::http::header::CONTENT_TYPE;
 use axum::http::response::Builder;
 use axum::response::Response;
@@ -14,6 +13,7 @@ use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
 use tokio::fs::{File, read_link};
 use tokio::io::AsyncReadExt;
 
+use crate::state::HttpState;
 use crate::stream_single;
 
 pub type StreamResponseItem = Result<Bytes, axum::Error>;
@@ -38,9 +38,9 @@ impl StreamBodyExt for Builder {
 
 static UNKNOWN_EXT: &str = "unknown_ext";
 
-pub(crate) fn normalize_url_path(output: &Path, method: &Method, q: &HashMap<String, String>, path: &str, with_state: bool) -> PathBuf {
+pub(crate) fn normalize_url_path(output: &Path, state: &HttpState, path: &str, with_state: bool) -> PathBuf {
 	if path.is_empty() {
-		output.join(format!("index.{method}.{UNKNOWN_EXT}"))
+		output.join(format!("index.{}.{UNKNOWN_EXT}", state.method))
 	} else {
 		let mut path = output.join(path);
 
@@ -52,7 +52,7 @@ pub(crate) fn normalize_url_path(output: &Path, method: &Method, q: &HashMap<Str
 				path.push(last);
 			}
 		}
-		if !q.is_empty() && with_state {
+		if !state.query.is_empty() && with_state {
 			let name = if let Some(name) = path.file_stem() {
 				name
 			} else {
@@ -60,7 +60,7 @@ pub(crate) fn normalize_url_path(output: &Path, method: &Method, q: &HashMap<Str
 			};
 			let mut last = name.to_os_string();
 			let ext = path.extension();
-			for (k, v) in q.iter() {
+			for (k, v) in state.query.iter() {
 				last.push("-");
 				last.push(percent_encode(k.as_bytes(), NON_ALPHANUMERIC).to_string());
 				if !v.is_empty() {

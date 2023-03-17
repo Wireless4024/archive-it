@@ -21,6 +21,7 @@ use tracing::{info, warn};
 use crate::{Config, http_all, unwrap_void};
 use crate::cli::HttpConfig;
 use crate::common::{normalize_url_path, serve_file, StreamBodyExt, StreamResponse};
+use crate::state::HttpState;
 
 struct ForwardConfig {
 	secure: bool,
@@ -35,7 +36,7 @@ pub(super) async fn handle(cfg: Config) {
 		let listen = http.listen;
 		http.rewrite = Some(http.rewrite.unwrap_or_else(|| format!("localhost:{listen}")));
 
-		http_all!(listen, get_proxy, get_root, ForwardConfig { secure, host, output, http, prefix_local });
+		http_all!(listen, get_proxy, get_root, Arc::new(ForwardConfig { secure, host, output, http, prefix_local }));
 	};
 }
 
@@ -48,17 +49,22 @@ async fn get_root(header: HeaderMap,
 
 async fn get_proxy(header: HeaderMap,
                    Path(path): Path<String>,
-                   Query(q): Query<HashMap<String, String>>,
+                   Query(query): Query<HashMap<String, String>>,
                    Extension(cfg): Extension<Arc<ForwardConfig>>,
                    RawBody(payload): RawBody) -> StreamResponse {
 	let method = Method::from_bytes(header.get("method").unwrap_or(&HeaderValue::from_static("GET")).as_bytes()).unwrap_or_default();
-	let npath = normalize_url_path(&cfg.output, &method, &q, &path, cfg.prefix_local.is_none());
+	let state = HttpState {
+		query,
+		method,
+	};
+	let npath = normalize_url_path(&cfg.output, &state, &path, cfg.prefix_local.is_none());
 	if let Some(parent) = npath.parent() {
 		if let Err(e) = create_dir_all(parent).await {
 			warn!("{e} at {parent:?}");
 		}
 	}
 	let builder = Response::builder();
+	let method = &state.method;
 	if method == Method::GET && npath.exists() {
 		info!("Serving:    {path:?}");
 		serve_file(npath, builder).await
@@ -67,7 +73,7 @@ async fn get_proxy(header: HeaderMap,
 		let resp = Client::new()
 			.request(method.clone(), format!("{}://{}/{path}", if cfg.secure { "https" } else { "http" }, cfg.host))
 			.body(payload)
-			.query(&q)
+			.query(&state.query)
 			.send()
 			.await
 			.unwrap();

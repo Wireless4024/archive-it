@@ -35,10 +35,14 @@ pub fn compress_zip(dir: &Path, output: &Path) {
 	let root = dir;
 	let option = FileOptions::default()
 		.compression_level(Some(9));
-	for x in read_dir_recursive(dir) {
+	for (x, is_dir) in read_dir_recursive(dir) {
 		let path = x.strip_prefix(root).unwrap();
+		if is_dir {
+			writer.add_directory(path.to_string_lossy(), option).unwrap();
+			continue;
+		}
 		info!("compressing {path:?}");
-		writer.start_file(path.to_string_lossy().into_owned(), option).unwrap();
+		writer.start_file(path.to_string_lossy(), option).unwrap();
 		let mut f = File::open(x).unwrap();
 		std::io::copy(&mut f, &mut writer).unwrap();
 	}

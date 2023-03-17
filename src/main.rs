@@ -9,6 +9,7 @@ pub(crate) mod cli;
 mod large_state;
 mod maybe_async;
 mod command;
+mod state;
 
 #[tokio::main]
 async fn main() {
